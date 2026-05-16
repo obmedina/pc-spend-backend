@@ -31,8 +31,6 @@ app.post('/api/scan', async (req, res) => {
 
     let browser;
     try {
-        // CORRECCIÓN CRUCIAL: Eliminamos executablePath para que use automáticamente
-        // el Chromium que descarga el paquete de Puppeteer al compilar en la nube.
         browser = await puppeteer.launch({
             headless: "new", 
             args: [
@@ -40,14 +38,26 @@ app.post('/api/scan', async (req, res) => {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage', // Evita saturación de RAM en Railway
-                '--start-maximized'
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--disable-extensions',
+                '--window-size=1920,1080' // Forzamos tamaño de monitor estándar para simular pantalla real
             ]
         });
 
         const page = await browser.newPage();
         
-        // User Agent real para parecer un humano
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+        // Forzamos un viewport real coincidente con la ventana simulada
+        await page.setViewport({ width: 1920, height: 1080 });
+        
+        // User Agent común y corriente de una máquina de escritorio estable
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+        // Cabeceras extra para imitar un sistema operativo en español
+        await page.setExtraHTTPHeaders({
+            'accept-language': 'es-ES,es;q=0.9,en;q=0.8',
+            'upgrade-insecure-requests': '1'
+        });
 
         // Optimización: Bloqueamos imágenes para que cargue volando
         await page.setRequestInterception(true);
@@ -59,13 +69,17 @@ app.post('/api/scan', async (req, res) => {
             }
         });
 
-        // 2. Navegar a la URL (esperamos a que la red esté tranquila)
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+        // 2. Navegar a la URL cambiando 'networkidle2' por 'domcontentloaded'
+        // Esto evita quedarse esperando eternamente a que carguen scripts publicitarios o de rastreo de Amazon
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        
+        // Pausa táctica de 2 segundos para dejar que el HTML estructural se asiente antes de raspar
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // 3. Extraer datos (Título + los primeros 2000 caracteres de texto)
+        // 3. Extraer datos (Aumentamos a los primeros 3000 caracteres de texto para pescar más specs)
         const pageData = await page.evaluate(() => {
-            const title = document.querySelector('h1')?.innerText || "";
-            const body = document.body.innerText.substring(0, 2000);
+            const title = document.querySelector('h1')?.innerText || document.title || "";
+            const body = document.body.innerText.substring(0, 3000);
             return `PRODUCT TITLE: ${title} \n CONTENT: ${body}`;
         });
 
