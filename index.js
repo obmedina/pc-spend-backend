@@ -6,12 +6,18 @@ require('dotenv').config();
 
 const app = express();
 
-// CORRECCIÓN: Configuración de CORS abierta para evitar bloqueos con Vercel
-app.use(cors({
-    origin: '*', 
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// CORRECCIÓN: Middleware manual blindado para tumbar el bloqueo de CORS (Preflight OPTIONS)
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Si el navegador pregunta antes de enviar los datos (Preflight), respondemos OK directo
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 
 app.use(express.json());
 
