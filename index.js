@@ -1,12 +1,12 @@
 const express = require('express');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer'); // Usando puppeteer estándar
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
 
-// CORRECCIÓN: Middleware manual blindado para tumbar el bloqueo de CORS (Preflight OPTIONS)
+// Middleware manual blindado para tumbar el bloqueo de CORS (Preflight OPTIONS)
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
@@ -21,7 +21,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Inicialización de Gemini con el modelo que confirmamos en tu lista
+// Inicialización de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
@@ -31,21 +31,15 @@ app.post('/api/scan', async (req, res) => {
 
     let browser;
     try {
-        // Determinamos la ruta del ejecutable de Chrome/Chromium según el entorno
-        const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
-                           process.env.CHROME_PATH || 
-                           '/usr/bin/chromium-browser' || 
-                           '/usr/bin/google-chrome';
-
-        // 1. Lanzamiento con camuflaje para evitar bloqueos de tiendas
+        // CORRECCIÓN CRUCIAL: Eliminamos executablePath para que use automáticamente
+        // el Chromium que descarga el paquete de Puppeteer al compilar en la nube.
         browser = await puppeteer.launch({
-            executablePath: chromePath,
             headless: "new", 
             args: [
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Evita que se sature la RAM en contenedores Docker/Nube
+                '--disable-dev-shm-usage', // Evita saturación de RAM en Railway
                 '--start-maximized'
             ]
         });
@@ -71,7 +65,6 @@ app.post('/api/scan', async (req, res) => {
         // 3. Extraer datos (Título + los primeros 2000 caracteres de texto)
         const pageData = await page.evaluate(() => {
             const title = document.querySelector('h1')?.innerText || "";
-            // Buscamos áreas comunes de specs para darle mejor info a la IA
             const body = document.body.innerText.substring(0, 2000);
             return `PRODUCT TITLE: ${title} \n CONTENT: ${body}`;
         });
@@ -104,10 +97,8 @@ app.post('/api/scan', async (req, res) => {
         const response = await result.response;
         let rawText = response.text().trim();
         
-        // Limpiamos posibles marcas de markdown que ponga la IA
         rawText = rawText.replace(/```json|```/g, "").trim();
 
-        // Buscamos los corchetes por seguridad para asegurar un JSON limpio
         const start = rawText.indexOf('{');
         const end = rawText.lastIndexOf('}');
         
