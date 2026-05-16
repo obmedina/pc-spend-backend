@@ -5,7 +5,14 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// CORRECCIÓN: Configuración de CORS abierta para evitar bloqueos con Vercel
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Inicialización de Gemini con el modelo que confirmamos en tu lista
@@ -19,7 +26,6 @@ app.post('/api/scan', async (req, res) => {
     let browser;
     try {
         // Determinamos la ruta del ejecutable de Chrome/Chromium según el entorno
-        // En Railway/Render se suele autodefinir PUPPETEER_EXECUTABLE_PATH. Si no, usamos CHROME_PATH o rutas típicas de Linux.
         const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
                            process.env.CHROME_PATH || 
                            '/usr/bin/chromium-browser' || 
