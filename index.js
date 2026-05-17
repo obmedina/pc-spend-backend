@@ -70,13 +70,12 @@ app.post('/api/scan', async (req, res) => {
         });
 
         // 2. Navegar a la URL cambiando 'networkidle2' por 'domcontentloaded'
-        // Esto evita quedarse esperando eternamente a que carguen scripts publicitarios o de rastreo de Amazon
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         
-        // Pausa táctica de 2 segundos para dejar que el HTML estructural se asiente antes de raspar
+        // Pausa táctica de 2 segundos para dejar que el HTML se asiente
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // 3. Extraer datos (Aumentamos a los primeros 3000 caracteres de texto para pescar más specs)
+        // 3. Extraer datos (Copiamos los primeros 3000 caracteres de texto)
         const pageData = await page.evaluate(() => {
             const title = document.querySelector('h1')?.innerText || document.title || "";
             const body = document.body.innerText.substring(0, 3000);
@@ -85,20 +84,30 @@ app.post('/api/scan', async (req, res) => {
 
         await browser.close();
 
-        // 4. Prompt optimizado en inglés para Gemini 3
+        // 4. Prompt inteligente, extensible y blindado contra bloqueos y productos falsos
         const prompt = `
-            Extract technical hardware data from the following text provided by a hardware store.
+            Analyze the following text provided by a store page and extract technical hardware or electronics data.
             
-            Instructions:
-            1. Identify if the product is a "gpu" or a "cpu".
-            2. Extract the full commercial name of the model.
-            3. Identify the TDP (Thermal Design Power) in Watts.
-            4. If TDP is missing, provide a realistic estimate for this specific model.
+            CRITICAL INSTRUCTIONS:
+            1. Classify the "type" using exactly one of these lowercase strings:
+               - "gpu" (if it's a dedicated graphics card)
+               - "cpu" (if it's a computer processor)
+               - "monitor" (if it's a computer monitor/screen)
+               - "periferico" (if it's a keyboard, mouse, headset, etc.)
+               - "none" (if it is a smartphone, tablet, laptop, component that is not listed above, clothing, an invalid link, or a security/captcha page)
+            
+            2. If the text looks like a Cloudflare security page, a Captcha, or an "Access Denied" error, you MUST set "type" to "none" and "name" to "Security Block".
+            
+            3. Extract the full commercial name of the model.
+            
+            4. Identify the TDP or power consumption in Watts (W) as a number:
+               - If it's a CPU/GPU/Monitor and TDP is missing, provide a realistic commercial average estimate for that specific model.
+               - If "type" is "none", set "tdp" to 0.
             
             Response Format (Strict JSON only):
             {
-                "type": "gpu" | "cpu",
-                "name": "Full Model Name",
+                "type": "gpu" | "cpu" | "monitor" | "periferico" | "none",
+                "name": "Full Model Name or Product Name",
                 "tdp": number
             }
 
